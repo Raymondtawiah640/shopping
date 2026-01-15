@@ -1,4 +1,4 @@
-a<?php
+<?php
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\ShoppingController;
