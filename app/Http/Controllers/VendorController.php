@@ -3,9 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\VendorRequest;
+use App\Http\Requests\VendorLoginRequest;
+use App\Mail\VendorVerificationCode;
 use App\Models\Vendor;
 use App\Services\VendorService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
 
 class VendorController extends Controller
 {
@@ -62,19 +66,51 @@ class VendorController extends Controller
         ]);
     }
     
-    public function vendorLogin(Request $request)
+    public function vendorLogin(VendorLoginRequest $request)
     {
         $vendorId = $request->input('vendor_id');
         $vendor = Vendor::where('vendor_id', $vendorId)->first();
-        
+
+        // Generate a 6-digit verification code
+        $code = str_pad(mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        // Store the code in cache for 10 minutes using email as key
+        Cache::put('vendor_verification_' . $vendor->email, $code, now()->addMinutes(10));
+
+        // Send the verification code via email
+        Mail::to($vendor->email)->send(new VendorVerificationCode($vendor, $code));
+
+        return response()->json([
+            'message' => 'Verification code sent to your email',
+        ]);
+    }
+
+    public function verifyCode(Request $request)
+    {
+        $vendorId = $request->input('vendor_id');
+        $code = $request->input('code');
+
+        $vendor = Vendor::where('vendor_id', $vendorId)->first();
+
         if (!$vendor) {
             return response()->json([
                 'message' => 'Vendor not found',
             ], 404);
         }
-        
+
+        $cachedCode = Cache::get('vendor_verification_' . $vendor->email);
+
+        if (!$cachedCode || $cachedCode !== $code) {
+            return response()->json([
+                'message' => 'Invalid or expired verification code',
+            ], 400);
+        }
+
+        // Clear the code from cache
+        Cache::forget('vendor_verification_' . $vendor->email);
+
         return response()->json([
-            'message' => 'Vendor login successful',
+            'message' => 'Verification successful',
             'vendor' => $vendor,
         ]);
     }

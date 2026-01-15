@@ -6,8 +6,15 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Customer;
+use App\Models\Vendor;
+use App\Models\Hotel;
+use App\Models\Restaurant;
+use App\Models\Transport;
+use App\Models\Tour;
 use App\Services\CustomerService;
 use App\Mail\OrderConfirmation;
+use App\Mail\VendorOrderNotification;
+use App\Http\Requests\UserLoginRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -133,9 +140,9 @@ class ShoppingController extends Controller
         ]);
     }
 
-    public function login(Request $request)
+    public function login(UserLoginRequest $request)
     {
-        $credentials = $request->only('email', 'password');
+        $credentials = $request->validated();
 
         if (auth()->attempt($credentials)) {
             $user = auth()->user();
@@ -213,6 +220,9 @@ class ShoppingController extends Controller
             Mail::to($customer->email)->send(new OrderConfirmation($order, $customer));
         }
 
+        // Send order notifications to vendors
+        $this->sendVendorOrderNotifications($order, $customer);
+
         return response()->json([
             'message' => 'Order placed successfully',
             'order' => $order,
@@ -234,4 +244,22 @@ class ShoppingController extends Controller
             'orders' => $orders,
         ]);
     }
+
+    private function sendVendorOrderNotifications(Order $order, Customer $customer)
+    {
+        // Group order items by vendor
+        $vendorItems = collect($order->items)->groupBy(function ($item) {
+            $product = Product::find($item['product_id']);
+            return $product ? $product->vendor_id : null;
+        })->filter(); // Remove null vendor groups
+
+        // Send notification to each vendor
+        foreach ($vendorItems as $vendorId => $items) {
+            $vendor = Vendor::where('vendor_id', $vendorId)->first();
+            if ($vendor && $vendor->email) {
+                Mail::to($vendor->email)->send(new VendorOrderNotification($order, $customer, $vendor, $items->toArray()));
+            }
+        }
+    }
 }
+
