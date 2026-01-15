@@ -11,6 +11,7 @@ use App\Models\Hotel;
 use App\Models\Restaurant;
 use App\Models\Transport;
 use App\Models\Tour;
+use App\Models\User;
 use App\Services\CustomerService;
 use App\Mail\OrderConfirmation;
 use App\Mail\VendorOrderNotification;
@@ -144,8 +145,9 @@ class ShoppingController extends Controller
     {
         $credentials = $request->validated();
 
-        if (auth()->attempt($credentials)) {
-            $user = auth()->user();
+        $user = User::where('email', $credentials['email'])->first();
+
+        if ($user && password_verify($credentials['password'], $user->password)) {
             $token = $user->createToken('user-token', ['*'], now()->addDays(30))->plainTextToken;
 
             return response()->json([
