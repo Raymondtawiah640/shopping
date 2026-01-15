@@ -4,7 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class VendorLoginRequest extends FormRequest
+class CustomerLoginRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -22,8 +22,8 @@ class VendorLoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'vendor_id' => 'required|string|exists:vendors,vendor_id',
-            'remember_me' => 'nullable|boolean',
+            'email' => 'required|string|email',
+            'password' => 'required|string',
         ];
     }
 }

@@ -3,9 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Services\CustomerService;
+use App\Mail\CustomerVerificationCode;
+use App\Models\Customer;
+use App\Http\Requests\CustomerRegisterRequest;
+use App\Http\Requests\CustomerLoginRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
 
 class CustomerController extends Controller
 {
@@ -16,9 +22,9 @@ class CustomerController extends Controller
         $this->customerService = $customerService;
     }
 
-    public function register(Request $request)
+    public function register(CustomerRegisterRequest $request)
     {
-        $customerData = $request->all();
+        $customerData = $request->validated();
 
         $customer = $this->customerService->registerCustomer($customerData);
 
@@ -41,9 +47,9 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function login(Request $request)
+    public function login(CustomerLoginRequest $request)
     {
-        $credentials = $request->only('email', 'password');
+        $credentials = $request->validated();
 
         $customer = $this->customerService->loginCustomer($credentials);
 
@@ -52,6 +58,38 @@ class CustomerController extends Controller
                 'message' => 'Invalid credentials',
             ], 401);
         }
+
+        // Generate a 6-digit verification code
+        $code = str_pad(mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        // Store the code in cache for 10 minutes
+        Cache::put('customer_verification_' . $customer->email, $code, now()->addMinutes(10));
+
+        // Send the verification code via email
+        Mail::to($customer->email)->send(new CustomerVerificationCode($customer, $code));
+
+        return response()->json([
+            'message' => 'Verification code sent to your email',
+        ]);
+    }
+
+    public function verifyCode(Request $request)
+    {
+        $email = $request->input('email');
+        $code = $request->input('code');
+
+        $cachedCode = Cache::get('customer_verification_' . $email);
+
+        if (!$cachedCode || $cachedCode !== $code) {
+            return response()->json([
+                'message' => 'Invalid or expired verification code',
+            ], 400);
+        }
+
+        // Clear the code from cache
+        Cache::forget('customer_verification_' . $email);
+
+        $customer = Customer::where('email', $email)->first();
 
         // Merge session cart to database cart
         $sessionCart = Session::get('cart', []);
@@ -128,16 +166,17 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function store(Request $request, $customerId)
+    public function store(Request $request)
     {
+        $customerId = auth()->user()->customer_id;
         $productId = $request->input('product_id');
 
         $wishlistItem = $this->customerService->addToWishlist($customerId, $productId);
 
         if (!$wishlistItem) {
             return response()->json([
-                'message' => 'Customer not found',
-            ], 404);
+                'message' => 'Failed to add to wishlist',
+            ], 400);
         }
 
         return response()->json([
@@ -146,9 +185,9 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, $customerId)
+    public function destroy(Request $request, $productId)
     {
-        $productId = $request->input('product_id');
+        $customerId = auth()->user()->customer_id;
 
         $result = $this->customerService->removeFromWishlist($customerId, $productId);
 
@@ -163,15 +202,10 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function index($customerId)
+    public function index()
     {
+        $customerId = auth()->user()->customer_id;
         $wishlist = $this->customerService->getCustomerWishlist($customerId);
-
-        if ($wishlist === null) {
-            return response()->json([
-                'message' => 'Customer not found',
-            ], 404);
-        }
 
         return response()->json([
             'message' => 'Customer wishlist retrieved successfully',

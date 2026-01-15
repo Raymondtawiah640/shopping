@@ -12,5 +12,6 @@ class Vendor extends Model
         'email',
         'phone_number',
         'vendor_id',
+        'vendor_type',
     ];
 }
