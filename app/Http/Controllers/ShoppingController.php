@@ -29,44 +29,7 @@ class ShoppingController extends Controller
         $this->customerService = $customerService;
     }
 
-    public function index(Request $request)
-    {
-        $query = Product::query();
-
-        // Search by name
-        if ($request->has('search')) {
-            $searchTerm = $request->input('search');
-            $query->where('name', 'like', '%' . $searchTerm . '%')
-                  ->orWhere('description', 'like', '%' . $searchTerm . '%');
-        }
-
-        // Filter by category
-        if ($request->has('category_id')) {
-            $categoryId = $request->input('category_id');
-            $query->where('category_id', $categoryId);
-        }
-
-        // Filter by price range
-        if ($request->has('min_price')) {
-            $query->where('price', '>=', $request->input('min_price'));
-        }
-
-        if ($request->has('max_price')) {
-            $query->where('price', '<=', $request->input('max_price'));
-        }
-
-        // Filter by vendor
-        if ($request->has('vendor_id')) {
-            $query->where('vendor_id', $request->input('vendor_id'));
-        }
-
-        $products = $query->get();
-
-        return response()->json([
-            'message' => 'Products retrieved successfully',
-            'products' => $products,
-        ]);
-    }
+   
 
     public function searchProducts(Request $request)
     {
